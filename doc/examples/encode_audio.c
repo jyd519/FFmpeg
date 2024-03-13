@@ -39,6 +39,7 @@
 #include <libavutil/samplefmt.h>
 
 /* check that a given sample format is supported by the encoder */
+// 检查编码器是否支持 sample_fmt 参数指定的采样格式
 static int check_sample_fmt(const AVCodec *codec, enum AVSampleFormat sample_fmt)
 {
     const enum AVSampleFormat *p = codec->sample_fmts;
@@ -52,6 +53,7 @@ static int check_sample_fmt(const AVCodec *codec, enum AVSampleFormat sample_fmt
 }
 
 /* just pick the highest supported samplerate */
+// 找到最匹配 编码器支持的采样率最接近的值 supported_samplerates
 static int select_sample_rate(const AVCodec *codec)
 {
     const int *p;
@@ -59,7 +61,7 @@ static int select_sample_rate(const AVCodec *codec)
 
     if (!codec->supported_samplerates)
         return 44100;
-
+  //找到离44100最佳的采样率
     p = codec->supported_samplerates;
     while (*p) {
         if (!best_samplerate || abs(44100 - *p) < abs(44100 - best_samplerate))
@@ -70,6 +72,7 @@ static int select_sample_rate(const AVCodec *codec)
 }
 
 /* select layout with the highest channel count */
+// 找到编码器最高的通道数
 static int select_channel_layout(const AVCodec *codec, AVChannelLayout *dst)
 {
     const AVChannelLayout *p, *best_ch_layout;
@@ -95,7 +98,7 @@ static void encode(AVCodecContext *ctx, AVFrame *frame, AVPacket *pkt,
                    FILE *output)
 {
     int ret;
-
+    //数据送入编码器, 如果 frame传null.就会flush 编码器中遗留的数据.所以最后总要才传个null进来
     /* send the frame for encoding */
     ret = avcodec_send_frame(ctx, frame);
     if (ret < 0) {
@@ -106,6 +109,7 @@ static void encode(AVCodecContext *ctx, AVFrame *frame, AVPacket *pkt,
     /* read all the available output packets (in general there may be any
      * number of them */
     while (ret >= 0) {
+        //从编码器中拿到能用的编码后的packet
         ret = avcodec_receive_packet(ctx, pkt);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
             return;
@@ -113,12 +117,13 @@ static void encode(AVCodecContext *ctx, AVFrame *frame, AVPacket *pkt,
             fprintf(stderr, "Error encoding audio frame\n");
             exit(1);
         }
-
+        // 写到文件中 : pkt->data, pkt->size
         fwrite(pkt->data, 1, pkt->size, output);
         av_packet_unref(pkt);
     }
 }
 
+// 编码音频  随机生成音频文件.组成frame.送如编码器编码后生成packet.写入文件
 int main(int argc, char **argv)
 {
     const char *filename;
@@ -138,12 +143,14 @@ int main(int argc, char **argv)
     filename = argv[1];
 
     /* find the MP2 encoder */
+    //根据指定的AVCodecID查找注册的解码器
     codec = avcodec_find_encoder(AV_CODEC_ID_MP2);
     if (!codec) {
         fprintf(stderr, "Codec not found\n");
         exit(1);
     }
 
+    // 为AVCodecContext分配内存
     c = avcodec_alloc_context3(codec);
     if (!c) {
         fprintf(stderr, "Could not allocate audio codec context\n");
@@ -154,6 +161,7 @@ int main(int argc, char **argv)
     c->bit_rate = 64000;
 
     /* check that the encoder supports s16 pcm input */
+    // 编码器是否支持这个采样位数
     c->sample_fmt = AV_SAMPLE_FMT_S16;
     if (!check_sample_fmt(codec, c->sample_fmt)) {
         fprintf(stderr, "Encoder does not support sample format %s",
@@ -193,6 +201,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // 编码器的参数与frame的参数保持一致: 样本数，样本格式，通道数
     frame->nb_samples     = c->frame_size;
     frame->format         = c->sample_fmt;
     ret = av_channel_layout_copy(&frame->ch_layout, &c->ch_layout);
@@ -200,6 +209,7 @@ int main(int argc, char **argv)
         exit(1);
 
     /* allocate the data buffers */
+    //给frame里的buf 分配内存, 并设置bufsize 
     ret = av_frame_get_buffer(frame, 0);
     if (ret < 0) {
         fprintf(stderr, "Could not allocate audio data buffers\n");
@@ -215,13 +225,15 @@ int main(int argc, char **argv)
         ret = av_frame_make_writable(frame);
         if (ret < 0)
             exit(1);
+        // Packed format:
+        // num_samples = frame->nb_samples * frame->channels
+        // num_samples就是音频数据的buffer大小(跟sample format有关)
         samples = (uint16_t*)frame->data[0];
-
         for (j = 0; j < c->frame_size; j++) {
             samples[2*j] = (int)(sin(t) * 10000);
 
             for (k = 1; k < c->ch_layout.nb_channels; k++)
-                samples[2*j + k] = samples[2*j];
+                samples[2*j + k] = samples[2*j];  // 通道数据一样
             t += tincr;
         }
         encode(c, frame, pkt, f);

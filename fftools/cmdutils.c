@@ -316,8 +316,12 @@ int parse_option(void *optctx, const char *opt, const char *arg,
     const OptionDef *po;
     int ret;
 
+    // 根据选项名查找选项定义
     po = find_option(options, opt);
+
+    // 选项?
     if (!po->name && opt[0] == 'n' && opt[1] == 'o') {
+        // 没找到， 尝试 no-<xxxx> 格式
         /* handle 'no' bool option */
         po = find_option(options, opt + 2);
         if ((po->name && (po->flags & OPT_BOOL)))
@@ -325,17 +329,21 @@ int parse_option(void *optctx, const char *opt, const char *arg,
     } else if (po->flags & OPT_BOOL)
         arg = "1";
 
+    // 没有找到
     if (!po->name)
         po = &opt_avoptions;
     if (!po->name) {
         av_log(NULL, AV_LOG_ERROR, "Unrecognized option '%s'\n", opt);
         return AVERROR(EINVAL);
     }
+
+    // 没有参数
     if (po->flags & HAS_ARG && !arg) {
         av_log(NULL, AV_LOG_ERROR, "Missing argument for option '%s'\n", opt);
         return AVERROR(EINVAL);
     }
 
+    // 写入选项
     ret = write_option(optctx, po, opt, arg);
     if (ret < 0)
         return ret;
@@ -343,6 +351,8 @@ int parse_option(void *optctx, const char *opt, const char *arg,
     return !!(po->flags & HAS_ARG);
 }
 
+
+// 根据options解析命令行参数：argc/argv
 int parse_options(void *optctx, int argc, char **argv, const OptionDef *options,
                   int (*parse_arg_function)(void *, const char*))
 {
@@ -359,11 +369,14 @@ int parse_options(void *optctx, int argc, char **argv, const OptionDef *options,
 
         if (handleoptions && opt[0] == '-' && opt[1] != '\0') {
             if (opt[1] == '-' && opt[2] == '\0') {
+                // '--'  结束参数处理
                 handleoptions = 0;
                 continue;
             }
-            opt++;
+            opt++; // 跳过'-'
 
+            // 解析选项/参数
+            // ret : 0 选项， 1： 参数, <0: 错误
             if ((ret = parse_option(optctx, opt, argv[optindex], options)) < 0)
                 return ret;
             optindex += ret;

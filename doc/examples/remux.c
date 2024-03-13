@@ -99,11 +99,13 @@ int main(int argc, char **argv)
 
     ofmt = ofmt_ctx->oformat;
 
+    // 创建输出流： 复制流参数
     for (i = 0; i < ifmt_ctx->nb_streams; i++) {
         AVStream *out_stream;
         AVStream *in_stream = ifmt_ctx->streams[i];
         AVCodecParameters *in_codecpar = in_stream->codecpar;
 
+        // 除了音频，视频，字幕流, 其他流都不复制
         if (in_codecpar->codec_type != AVMEDIA_TYPE_AUDIO &&
             in_codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
             in_codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
@@ -137,12 +139,14 @@ int main(int argc, char **argv)
         }
     }
 
+    // 写入容器头
     ret = avformat_write_header(ofmt_ctx, NULL);
     if (ret < 0) {
         fprintf(stderr, "Error occurred when opening output file\n");
         goto end;
     }
 
+    // 复制packet: 读入pkt，不解码，重新计算pts/dts, 写入pkt
     while (1) {
         AVStream *in_stream, *out_stream;
 
@@ -162,6 +166,7 @@ int main(int argc, char **argv)
         log_packet(ifmt_ctx, pkt, "in");
 
         /* copy packet */
+        // rescale pts, dts, duration ...
         av_packet_rescale_ts(pkt, in_stream->time_base, out_stream->time_base);
         pkt->pos = -1;
         log_packet(ofmt_ctx, pkt, "out");
@@ -176,6 +181,7 @@ int main(int argc, char **argv)
         }
     }
 
+    // 写入文件尾部
     av_write_trailer(ofmt_ctx);
 end:
     av_packet_free(&pkt);

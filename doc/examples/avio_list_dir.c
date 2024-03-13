@@ -68,6 +68,8 @@ static int list_op(const char *input_dir)
     int cnt, ret;
     char filemode[4], uid_and_gid[20];
 
+    // 打开目录
+    // 循环：读取目录内容，直到返回null
     if ((ret = avio_open_dir(&ctx, input_dir, NULL)) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot open directory: %s.\n", av_err2str(ret));
         goto fail;
@@ -84,7 +86,7 @@ static int list_op(const char *input_dir)
         if (entry->filemode == -1) {
             snprintf(filemode, 4, "???");
         } else {
-            snprintf(filemode, 4, "%3"PRIo64, entry->filemode);
+            snprintf(filemode, 4, "%3"PRIo64, entry->filemode);  // unix file mode
         }
         snprintf(uid_and_gid, 20, "%"PRId64"(%"PRId64")", entry->user_id, entry->group_id);
         if (cnt == 0)
@@ -93,11 +95,11 @@ static int list_op(const char *input_dir)
                    "ACCESSED", "STATUS_CHANGED");
         av_log(NULL, AV_LOG_INFO, "%-9s %12"PRId64" %30s %10s %s %16"PRId64" %16"PRId64" %16"PRId64"\n",
                type_string(entry->type),
-               entry->size,
-               entry->name,
-               uid_and_gid,
+               entry->size,  // 文件大小
+               entry->name,  // 文件名
+               uid_and_gid,  // 用户id和组id
                filemode,
-               entry->modification_timestamp,
+               entry->modification_timestamp, // 修改时间
                entry->access_timestamp,
                entry->status_change_timestamp);
         avio_free_directory_entry(&entry);

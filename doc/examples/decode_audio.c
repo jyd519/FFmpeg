@@ -40,6 +40,7 @@
 #define AUDIO_INBUF_SIZE 20480
 #define AUDIO_REFILL_THRESH 4096
 
+// 根据sample_fmt获取对应的采样格式名, 用于ffplay的-f参数
 static int get_format_from_sample_fmt(const char **fmt,
                                       enum AVSampleFormat sample_fmt)
 {
@@ -55,9 +56,11 @@ static int get_format_from_sample_fmt(const char **fmt,
     };
     *fmt = NULL;
 
+    // 根据cpu架构选择sample_fmt对应的采样格式名: be / le
     for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
         struct sample_fmt_entry *entry = &sample_fmt_entries[i];
         if (sample_fmt == entry->sample_fmt) {
+            // 根据cpu大端, 小端选择fmt_be / fmt_le
             *fmt = AV_NE(entry->fmt_be, entry->fmt_le);
             return 0;
         }
@@ -75,6 +78,9 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
     int i, ch;
     int ret, data_size;
 
+    // 推送数据
+    // loop: 接受数据
+    
     /* send the packet with the compressed data to the decoder */
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0) {
@@ -91,12 +97,17 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
             fprintf(stderr, "Error during decoding\n");
             exit(1);
         }
+        // 根据样本格式计算每个样本的字节数
         data_size = av_get_bytes_per_sample(dec_ctx->sample_fmt);
         if (data_size < 0) {
             /* This should not occur, checking just for paranoia */
             fprintf(stderr, "Failed to calculate data size\n");
             exit(1);
         }
+
+        // 把样本数据写入文件: 
+        //   Frame中data布局是：planar格式(ffmpeg内部使用的格式)
+        //   写入文件的布局是：packed格式
         for (i = 0; i < frame->nb_samples; i++)
             for (ch = 0; ch < dec_ctx->ch_layout.nb_channels; ch++)
                 fwrite(frame->data[ch] + data_size*i, 1, data_size, outfile);
@@ -149,11 +160,14 @@ int main(int argc, char **argv)
     }
 
     /* open it */
+    // 打开解码器
     if (avcodec_open2(c, codec, NULL) < 0) {
         fprintf(stderr, "Could not open codec\n");
         exit(1);
     }
 
+
+    // 打开输入，输出文件
     f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "Could not open %s\n", filename);
@@ -165,11 +179,14 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // 读取数据
     /* decode until eof */
     data      = inbuf;
     data_size = fread(inbuf, 1, AUDIO_INBUF_SIZE, f);
 
+    // 解码数据：直到数据全部解码完成
     while (data_size > 0) {
+        // 延迟创建decoded_frame
         if (!decoded_frame) {
             if (!(decoded_frame = av_frame_alloc())) {
                 fprintf(stderr, "Could not allocate audio frame\n");
@@ -177,6 +194,7 @@ int main(int argc, char **argv)
             }
         }
 
+        // 从data中解析Packet: 返回data消耗的字节数
         ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
                                data, data_size,
                                AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
@@ -187,10 +205,11 @@ int main(int argc, char **argv)
         data      += ret;
         data_size -= ret;
 
+        // 解码Packet
         if (pkt->size)
             decode(c, pkt, decoded_frame, outfile);
 
-        if (data_size < AUDIO_REFILL_THRESH) {
+        if (data_size < AUDIO_REFILL_THRESH) {  // 剩余数据不够，从文件中读取填充更多数据
             memmove(inbuf, data, data_size);
             data = inbuf;
             len = fread(data + data_size, 1,
@@ -208,6 +227,7 @@ int main(int argc, char **argv)
     /* print output pcm infomations, because there have no metadata of pcm */
     sfmt = c->sample_fmt;
 
+    // 根据采样格式判断是否为planar
     if (av_sample_fmt_is_planar(sfmt)) {
         const char *packed = av_get_sample_fmt_name(sfmt);
         printf("Warning: the sample format the decoder produced is planar "
@@ -220,6 +240,9 @@ int main(int argc, char **argv)
     if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
         goto end;
 
+
+    /* 打印ffplay命令行
+     *   音频数据格式的三要素： 采样格式、通道数、采样率 */
     printf("Play the output audio file with the command:\n"
            "ffplay -f %s -ac %d -ar %d %s\n",
            fmt, n_channels, c->sample_rate,

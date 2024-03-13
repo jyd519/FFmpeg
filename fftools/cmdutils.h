@@ -129,11 +129,11 @@ typedef struct OptionDef {
 #define OPT_INPUT  0x40000
 #define OPT_OUTPUT 0x80000
      union {
-        void *dst_ptr;
-        int (*func_arg)(void *, const char *, const char *);
-        size_t off;
+        void *dst_ptr;  // 参数值存储地址
+        int (*func_arg)(void *, const char *, const char *);  // 函数指针用于保存参数值
+        size_t off;    // 参数值存储偏移(相对optctx的地址)
     } u;
-    const char *help;
+    const char *help;  // 帮助
     const char *argname;
 } OptionDef;
 

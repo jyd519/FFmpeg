@@ -38,6 +38,7 @@ static void process_client(AVIOContext *client, const char *in_uri)
     uint8_t buf[1024];
     int ret, n, reply_code;
     uint8_t *resource = NULL;
+    // 握手： 成功返回0， 重复返回>0, 失败返回<0 
     while ((ret = avio_handshake(client)) > 0) {
         av_opt_get(client, "resource", AV_OPT_SEARCH_CHILDREN, &resource);
         // check for strlen(resource) is necessary, because av_opt_get()
@@ -69,12 +70,15 @@ static void process_client(AVIOContext *client, const char *in_uri)
     if (reply_code != 200)
         goto end;
     fprintf(stderr, "Opening input file.\n");
+
+    // 打开文件
     if ((ret = avio_open2(&input, in_uri, AVIO_FLAG_READ, NULL, NULL)) < 0) {
         av_log(input, AV_LOG_ERROR, "Failed to open input: %s: %s.\n", in_uri,
                av_err2str(ret));
         goto end;
     }
     for(;;) {
+        // 读取数据
         n = avio_read(input, buf, sizeof(buf));
         if (n < 0) {
             if (n == AVERROR_EOF)
@@ -83,6 +87,7 @@ static void process_client(AVIOContext *client, const char *in_uri)
                    av_err2str(n));
             break;
         }
+        // 写入数据： 发送给客户端
         avio_write(client, buf, n);
         avio_flush(client);
     }
@@ -115,6 +120,8 @@ int main(int argc, char **argv)
 
     avformat_network_init();
 
+
+    // 指定分配AVDictionary结构体
     if ((ret = av_dict_set(&options, "listen", "2", 0)) < 0) {
         fprintf(stderr, "Failed to set listen mode for server: %s\n", av_err2str(ret));
         return ret;

@@ -32,7 +32,10 @@
 #include <libavformat/avformat.h>
 #include <libavformat/avio.h>
 #include <libavutil/file.h>
+#include <stdint.h>
 
+
+// 待读数据块： 作为read_packet的上下文
 struct buffer_data {
     uint8_t *ptr;
     size_t size; ///< size left in the buffer
@@ -41,20 +44,21 @@ struct buffer_data {
 static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     struct buffer_data *bd = (struct buffer_data *)opaque;
-    buf_size = FFMIN(buf_size, bd->size);
+    buf_size = FFMIN(buf_size, bd->size);  // 不能读取太多
 
     if (!buf_size)
         return AVERROR_EOF;
     printf("ptr:%p size:%zu\n", bd->ptr, bd->size);
 
     /* copy internal buffer data to buf */
-    memcpy(buf, bd->ptr, buf_size);
-    bd->ptr  += buf_size;
-    bd->size -= buf_size;
+    memcpy(buf, bd->ptr, buf_size);  // 填充到buf中
+    bd->ptr  += buf_size; // 减去已经填充的数据
+    bd->size -= buf_size;  
 
     return buf_size;
 }
 
+// 以内存方式读取音频数据
 int main(int argc, char *argv[])
 {
     AVFormatContext *fmt_ctx = NULL;
@@ -73,6 +77,7 @@ int main(int argc, char *argv[])
     }
     input_filename = argv[1];
 
+    // 把文件映射到内存： buffer， buffer_size
     /* slurp file content into buffer */
     ret = av_file_map(input_filename, &buffer, &buffer_size, 0, NULL);
     if (ret < 0)
@@ -87,11 +92,13 @@ int main(int argc, char *argv[])
         goto end;
     }
 
+    // 分配buffer块 4096
     avio_ctx_buffer = av_malloc(avio_ctx_buffer_size);
     if (!avio_ctx_buffer) {
         ret = AVERROR(ENOMEM);
         goto end;
     }
+    // 分配AVIOContext：read_packet 回调用来填充avio_ctx_buffer
     avio_ctx = avio_alloc_context(avio_ctx_buffer, avio_ctx_buffer_size,
                                   0, &bd, &read_packet, NULL, NULL);
     if (!avio_ctx) {
@@ -100,6 +107,7 @@ int main(int argc, char *argv[])
     }
     fmt_ctx->pb = avio_ctx;
 
+    // 打开avformat上下文
     ret = avformat_open_input(&fmt_ctx, NULL, NULL, NULL);
     if (ret < 0) {
         fprintf(stderr, "Could not open input\n");
