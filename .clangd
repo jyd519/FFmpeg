@@ -1,0 +1,30 @@
+---
+CompileFlags:
+  Add:
+    - -IE:/FFmpeg
+    - -IE:/FFmpeg/out/ffbuild
+---
+
+If:
+  PathMatch: .*\.cpp
+
+CompileFlags:
+  Remove: -xc
+  Add: [-xc++, -std=c++17]
+
+---
+# objcpp
+If:
+  PathMatch: .*\.mm
+
+CompileFlags:
+  Remove: [-xc, -xc++]
+
+---
+If:
+  PathMatch: .*\.c
+
+CompileFlags:
+  Add: [-std=c11]
+
+# vim: ft=yaml:
